@@ -1,0 +1,68 @@
+import pandas as pd
+import numpy as np
+import streamlit as st
+import datetime
+import warnings
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+lr = LinearRegression()
+from sklearn.metrics import mean_absolute_error
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.tree import DecisionTreeRegressor
+
+warnings.simplefilter("ignore")
+
+df = pd.read_excel("C://Users//Елена//Desktop//DA//MLeuro.xlsx", engine="openpyxl")
+df.drop(columns=['nominal','cdx'],axis=1, inplace=True)
+
+df = df.sort_values(by='data').reset_index(drop=True)
+df.set_index('data').plot()
+
+df.set_index('data', inplace = True)
+
+def make_features(data, max_lag, rolling_mean_size):
+    data['year'] = data.index.year
+    data['month'] = data.index.month
+    data['day'] = data.index.day
+    data['dayofweek'] = data.index.dayofweek
+    data['is_weekend'] = data.index.isin([5,6])*1
+    
+    for lag in range(1, max_lag + 1):
+        data['lag_{}'.format(lag)] = data['curs'].shift(lag)
+
+    data['y_mean'] = data['curs'].shift().rolling(rolling_mean_size).mean().copy()
+
+
+make_features(df,30,3)
+df.dropna(inplace = True)
+
+X_train,X_test, y_train, y_test = train_test_split(df.drop('curs',axis=1),
+                                                  df.curs,
+                                                  shuffle = False,
+                                                  test_size = 0.21)
+
+lr.fit(X_train, y_train)
+
+print('Ошибка на Train',round(mean_absolute_error(y_train, lr.predict(X_train)),2))
+print('Ошибка на Test',round(mean_absolute_error(y_test, lr.predict(X_test)),2))
+
+# Предсказываем на 12.10.2022
+
+df_n = pd.DataFrame(df['curs']).reset_index().copy()
+df_concat = df_n.tail(1).copy()
+df_concat.reset_index( inplace = True , drop=True)
+df_concat['data'] = pd.to_datetime('2022-10-12')
+df_concat['curs'] = 0
+
+df_1 = pd.concat([df_n,df_concat], ignore_index=True)
+df_1.set_index('data', inplace = True)
+
+make_features(df_1,30,3)
+df_1.drop('curs',axis=1).tail(1)
+
+lr_full = LinearRegression()
+lr_full.fit(df.drop('curs',axis=1),df.curs)
+print('Предсказание на 12 октября - ',lr.predict(df_1.drop('curs',axis=1).tail(1))[0])
+print('Предсказание на 12 октября, модель видела весь датасет - ',lr_full.predict(df_1.drop('curs',axis=1).tail(1))[0])
+
